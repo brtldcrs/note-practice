@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Note Practice">
+<meta name="theme-color" content="#f6f3ee">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Note Practice</title>
+<style>
+  :root{
+    --bg:#f6f3ee; --ink:#1d1b18; --muted:#8a847a; --card:#fffdf9; --line:#2a2723;
+    --green:#2e9d5b; --red:#d6453d; --btn:#ffffff; --border:#e2ddd4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#151413; --ink:#f1ede6; --muted:#9a948a; --card:#1f1d1b; --line:#e9e4dc;
+      --btn:#262321; --border:#36322e; }
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+    -webkit-user-select:none; user-select:none; touch-action:manipulation}
+  main{max-width:520px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;
+    padding:20px 16px 28px; gap:18px}
+
+  /* score */
+  .score{display:flex; justify-content:space-between; align-items:center; gap:8px}
+  .counts{flex:1; min-width:0; display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  .count{display:flex; align-items:baseline; justify-content:center; gap:4px; padding:8px 4px; min-width:0; border-radius:999px;
+    background:var(--card); border:1px solid var(--border); font-variant-numeric:tabular-nums}
+  .count b{font-size:20px}
+  .count span{font-size:13px; color:var(--muted)}
+  .count.right b{color:var(--green)} .count.wrong b{color:var(--red)}
+  .reset{flex:none; width:40px; height:40px; display:grid; place-items:center; border-radius:50%;
+    background:var(--card); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:0}
+  .reset:active{transform:scale(.92)}
+
+  /* staff */
+  .staff{background:var(--card); border:1px solid var(--border); border-radius:20px; padding:6px 4px}
+  .staff svg{display:block; width:100%; height:auto}
+  .staff{position:relative; overflow:hidden}
+  .timebar{position:absolute; left:0; right:0; bottom:0; height:5px; background:var(--border); display:none}
+  .timebar.show{display:block}
+  .timebar i{display:block; height:100%; width:100%; background:var(--ink)}
+  .timebar.out i{background:var(--red)}
+
+  /* timer buttons */
+  .timer{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+  .timer button{display:flex; align-items:center; justify-content:center; gap:6px; background:var(--card);
+    border:1px solid var(--border); border-radius:14px; padding:11px 0; font-size:16px; font-weight:600;
+    color:var(--muted); cursor:pointer; font-family:inherit; transition:background .2s, color .2s}
+  .timer button.on{background:var(--ink); border-color:var(--ink); color:var(--bg)}
+  .staff line{stroke:var(--line); stroke-width:1.3}
+  .clef path{fill:var(--line)}
+  #note circle{fill:var(--line); transition:fill .15s}
+  #note line{stroke:var(--line); stroke-width:1.3}
+  #note.ok circle{fill:var(--green)}
+  #note.bad circle{fill:var(--red)}
+
+  /* clef slider */
+  .switch{position:relative; display:grid; grid-template-columns:1fr 1fr; background:var(--card);
+    border:1px solid var(--border); border-radius:14px; padding:4px}
+  .switch .thumb{position:absolute; top:4px; bottom:4px; left:4px; width:calc(50% - 4px);
+    background:var(--ink); border-radius:10px; transition:transform .25s cubic-bezier(.3,.7,.3,1);
+    transform:translateX(100%)}
+  .switch.bass .thumb{transform:translateX(0)}
+  .switch button{position:relative; z-index:1; background:none; border:none; padding:11px 0;
+    font-size:16px; font-weight:600; color:var(--muted); cursor:pointer; transition:color .2s}
+  .switch:not(.bass) .t, .switch.bass .b{color:var(--bg)}
+  /* in mixed mode the slider just quietly shows which clef is on screen */
+  .switch.mixed .thumb{background:var(--border)}
+  .switch.mixed button{color:var(--ink) !important}
+  .clefs{display:flex; flex-direction:column; gap:8px}
+
+  /* mix toggle */
+  .mix{display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
+    background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px;
+    font-size:16px; font-weight:600; color:var(--muted); cursor:pointer; font-family:inherit;
+    transition:color .2s, border-color .2s}
+  .mix .tg{position:relative; width:36px; height:22px; border-radius:999px; background:var(--border);
+    transition:background .2s; flex:none}
+  .mix .tg::after{content:''; position:absolute; top:3px; left:3px; width:16px; height:16px;
+    border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .2s}
+  .mix.on{color:var(--ink); border-color:var(--ink)}
+  .mix.on .tg{background:var(--green)}
+  .mix.on .tg::after{transform:translateX(14px)}
+
+  /* answer buttons */
+  .keys{display:grid; grid-template-columns:repeat(7,1fr); gap:7px; margin-top:auto}
+  .keys button{aspect-ratio:3/4; border-radius:12px; border:1px solid var(--border); background:var(--btn);
+    color:var(--ink); font-size:22px; font-weight:700; cursor:pointer;
+    transition:background .12s, color .12s, transform .08s}
+  .keys button:active{transform:scale(.94)}
+  .keys button.ok{background:var(--green); border-color:var(--green); color:#fff}
+  .keys button.bad{background:var(--red); border-color:var(--red); color:#fff}
+  .hint{text-align:center; color:var(--muted); font-size:13px; margin:0}
+</style>
+</head>
+<body>
+<main>
+  <div class="score">
+    <div class="counts">
+      <div class="count right"><b id="right">0</b><span>right</span></div>
+      <div class="count wrong"><b id="wrong">0</b><span>wrong</span></div>
+      <div class="count total"><b id="total">0</b><span>total</span></div>
+    </div>
+    <button class="reset" id="reset" aria-label="Reset score" title="Reset score"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+  </div>
+
+  <div class="staff">
+    <svg viewBox="0 24 220 124" aria-label="Staff with one note">
+      <g id="lines">
+        <line x1="8" x2="212" y1="60" y2="60"/>
+        <line x1="8" x2="212" y1="72" y2="72"/>
+        <line x1="8" x2="212" y1="84" y2="84"/>
+        <line x1="8" x2="212" y1="96" y2="96"/>
+        <line x1="8" x2="212" y1="108" y2="108"/>
+      </g>
+      <!-- clef outlines from Noto Music (SIL Open Font License), scaled so one staff space = 12 -->
+      <g class="clef" id="treble"><path transform="translate(13.54,108.590) scale(0.04918,-0.04918)" d="M314 801Q300 854 291.0 906.0Q282 958 282 1012Q282 1059 288.5 1100.5Q295 1142 307 1177Q320 1217 341.0 1252.5Q362 1288 385.5 1311.0Q409 1334 427 1334Q451 1334 493 1249Q514 1206 524.0 1156.0Q534 1106 534 1049Q534 978 515.0 907.5Q496 837 459.5 775.0Q423 713 372 666L407 498Q422 500 432.0 501.0Q442 502 447 502Q508 502 556.0 467.5Q604 433 632.5 377.0Q661 321 661 254Q661 177 621.5 115.5Q582 54 503 25Q508 8 532 -117Q538 -147 541.0 -164.5Q544 -182 545.0 -195.0Q546 -208 546 -225Q546 -275 521.5 -314.5Q497 -354 455.5 -376.0Q414 -398 363 -398Q311 -398 271.0 -378.5Q231 -359 208.0 -324.5Q185 -290 185 -245Q185 -197 211.5 -165.0Q238 -133 287 -133Q329 -133 355.5 -163.5Q382 -194 382 -236Q382 -272 357.0 -299.0Q332 -326 292 -326H282Q308 -365 364 -365Q433 -365 472.0 -320.0Q511 -275 511 -205Q511 -188 507.0 -159.5Q503 -131 493 -91Q483 -51 477.5 -25.0Q472 1 470 12Q436 2 390 2Q304 2 222 52Q142 102 96.0 184.0Q50 266 50 361Q50 451 91 530Q132 609 192.5 675.0Q253 741 314 801ZM341 826Q364 838 390.0 870.5Q416 903 440.0 945.0Q464 987 479.0 1029.5Q494 1072 494 1106Q494 1142 483.0 1163.0Q472 1184 445 1184Q421 1184 398.5 1162.0Q376 1140 358.5 1103.5Q341 1067 331.0 1022.0Q321 977 321 930Q321 898 327.5 872.0Q334 846 341 826ZM398 379Q371 373 347.0 353.5Q323 334 308.5 306.5Q294 279 294 248Q294 223 307.0 196.5Q320 170 339 154Q352 142 365 136Q380 129 380 123Q380 120 370 117Q332 126 301.5 151.0Q271 176 253.5 211.5Q236 247 236 287Q236 330 253.5 370.0Q271 410 302.5 442.0Q334 474 374 490L345 641Q229 547 174.5 456.5Q120 366 120 277Q120 212 154.0 156.0Q188 100 247.0 65.5Q306 31 380 31Q400 31 420.5 35.0Q441 39 464 45ZM495 55Q593 97 593 227Q593 270 571.0 305.5Q549 341 512.0 362.0Q475 383 429 383Z"/></g>
+      <g class="clef" id="bass" style="display:none"><path transform="translate(15.54,103.700) scale(0.04918,-0.04918)" d="M50 123Q216 231 288 301Q336 348 373.0 408.5Q410 469 431.5 536.0Q453 603 453 669Q453 728 435.0 773.5Q417 819 383.0 845.0Q349 871 302 871Q284 871 264.5 867.0Q245 863 224 855Q181 839 158.0 813.5Q135 788 135 765Q135 756 143.0 752.0Q151 748 158 748Q168 748 183 752Q190 754 196.5 755.0Q203 756 210 756Q248 756 272.0 733.5Q296 711 296 674Q296 638 266.0 612.0Q236 586 195 586Q146 586 111.0 617.0Q76 648 76 697Q76 756 109.0 802.0Q142 848 198.5 874.0Q255 900 324 900Q400 900 460.0 867.0Q520 834 555.5 776.5Q591 719 591 646Q591 551 538 464Q511 419 476.5 379.0Q442 339 389.0 297.5Q336 256 256.0 208.0Q176 160 57 101ZM687 809Q710 809 726.0 793.0Q742 777 742 754Q742 731 726.0 715.5Q710 700 687 700Q664 700 648.0 715.5Q632 731 632 754Q632 777 648.0 793.0Q664 809 687 809ZM687 589Q710 589 726.0 573.0Q742 557 742 534Q742 511 726.0 495.5Q710 480 687 480Q664 480 648.0 495.5Q632 511 632 534Q632 557 648.0 573.0Q664 589 687 589Z"/></g>
+      <g id="note"></g>
+    </svg>
+    <div class="timebar" id="timebar"><i id="timefill"></i></div>
+  </div>
+
+
+  <div class="clefs">
+    <div class="timer" id="timer" aria-label="Time per note (tap again to switch off)">
+      <button data-s="1"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>1s</button>
+      <button data-s="3"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>3s</button>
+      <button data-s="5"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>5s</button>
+    </div>
+    <div class="switch" id="switch" role="tablist">
+      <div class="thumb"></div>
+      <button class="b" data-clef="bass">Bass</button>
+      <button class="t" data-clef="treble">Treble</button>
+    </div>
+    <button class="mix" id="mix" aria-pressed="false"><span class="tg"></span>Mix bass &amp; treble</button>
+  </div>
+
+  <div class="keys" id="keys"></div>
+  <p class="hint">Name the note. One tap per note: if right, the letter flashes green, if wrong, red. Then the next note appears.</p>
+</main>
+
+<script>
+  const LETTERS = ['C','D','E','F','G','A','B'];
+  // Diatonic step d = 0 is the bottom staff line: E4 in treble, G2 in bass.
+  // Range d = -2..10 covers one ledger line below to one ledger line above.
+  const BASE = { treble: 2 /* E */, bass: 4 /* G */ };
+  const BOTTOM = 108, STEP = 6, NOTE_X = 140;
+
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem('nr_'+k); return v===null ? d : JSON.parse(v); } catch(e){ return d; } },
+    set(k, v){ try { localStorage.setItem('nr_'+k, JSON.stringify(v)); } catch(e){} }
+  };
+
+  let clef = store.get('clef','treble') === 'bass' ? 'bass' : 'treble';
+  let mixed = store.get('mixed', false) === true;
+  const savedTimer = store.get('timer', 3);  // 3 seconds unless you chose otherwise
+  let limit = [0,1,3,5].includes(savedTimer) ? savedTimer : 3; // seconds, 0 = off
+  let timerId = null, timeouts = 0; // timeouts in a row; after 3 the timer waits for you
+  let right = store.get('right',0), wrong = store.get('wrong',0);
+  let d = null, answer = null, locked = false;
+
+  const $ = id => document.getElementById(id);
+  const noteG = $('note'), keysEl = $('keys');
+
+  // A–G buttons
+  ['C','D','E','F','G','A','B'].forEach(l => {
+    const b = document.createElement('button');
+    b.textContent = l; b.dataset.l = l;
+    b.addEventListener('click', () => guess(b));
+    keysEl.appendChild(b);
+  });
+
+  function renderCounts(){
+    $('right').textContent = right; $('wrong').textContent = wrong;
+    $('total').textContent = right + wrong;
+    store.set('right', right); store.set('wrong', wrong);
+  }
+
+  // Show a clef on the staff and move the slider to it
+  function showClef(c){
+    clef = c;
+    $('switch').classList.toggle('bass', c === 'bass');
+    $('treble').style.display = c === 'treble' ? '' : 'none';
+    $('bass').style.display = c === 'bass' ? '' : 'none';
+  }
+
+  function renderMix(){
+    $('mix').classList.toggle('on', mixed);
+    $('mix').setAttribute('aria-pressed', mixed);
+    $('switch').classList.toggle('mixed', mixed);
+  }
+
+  // Choosing Bass or Treble on the slider switches mixed mode off
+  function setClef(c){
+    mixed = false; store.set('mixed', false); renderMix();
+    store.set('clef', c);
+    showClef(c);
+    newNote();
+  }
+
+  function newNote(){
+    const prevClef = clef, prevD = d;
+    let c = clef, nd;
+    do {
+      if (mixed) c = Math.random() < 0.5 ? 'bass' : 'treble';
+      nd = Math.floor(Math.random() * 13) - 2;
+    } while (c === prevClef && nd === prevD);
+    if (c !== clef) showClef(c);
+    d = nd;
+    answer = LETTERS[(BASE[clef] + d) % 7];
+    locked = false;
+    keysEl.querySelectorAll('button').forEach(b => { b.className = ''; });
+    drawNote();
+    startTimer();
+  }
+
+  // ---- timer ----
+  function renderTimer(){
+    $('timer').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.s === limit));
+    $('timebar').classList.toggle('show', limit > 0);
+  }
+
+  function stopTimer(){
+    clearTimeout(timerId); timerId = null;
+    const fill = $('timefill');
+    const w = getComputedStyle(fill).width;   // freeze the bar where it is
+    fill.style.transition = 'none'; fill.style.width = w;
+  }
+
+  function startTimer(){
+    clearTimeout(timerId); timerId = null;
+    const bar = $('timebar'), fill = $('timefill');
+    bar.classList.remove('out');
+    fill.style.transition = 'none'; fill.style.width = '100%';
+    if (!limit || locked || timeouts >= 3 || document.hidden) return;
+    void fill.offsetWidth; // restart the animation
+    fill.style.transition = `width ${limit}s linear`; fill.style.width = '0%';
+    timerId = setTimeout(timeUp, limit * 1000);
+  }
+
+  function timeUp(){
+    if (locked) return;
+    locked = true; timerId = null;
+    timeouts++; wrong++;
+    $('timebar').classList.add('out');
+    noteG.className.baseVal = 'bad';
+    keysEl.querySelector(`[data-l="${answer}"]`).className = 'ok';
+    renderCounts();
+    setTimeout(newNote, 1000);
+  }
+
+  function drawNote(){
+    const y = BOTTOM - d * STEP;
+    let svg = '';
+    if (d <= -2) svg += `<line x1="${NOTE_X-12}" x2="${NOTE_X+12}" y1="120" y2="120"/>`;
+    if (d >= 10) svg += `<line x1="${NOTE_X-12}" x2="${NOTE_X+12}" y1="48" y2="48"/>`;
+    svg += `<circle cx="${NOTE_X}" cy="${y}" r="6"/>`;
+    noteG.className.baseVal = '';
+    noteG.innerHTML = svg;
+  }
+
+  function guess(btn){
+    if (locked) return;
+    locked = true; timeouts = 0;
+    stopTimer();
+    if (btn.dataset.l === answer){
+      btn.className = 'ok'; noteG.className.baseVal = 'ok'; right++;
+    } else {
+      btn.className = 'bad'; noteG.className.baseVal = 'bad'; wrong++;
+      // flash the correct letter green so you see what it was
+      keysEl.querySelector(`[data-l="${answer}"]`).className = 'ok';
+    }
+    renderCounts();
+    setTimeout(newNote, 1000);
+  }
+
+  $('switch').addEventListener('click', e => {
+    const c = e.target.closest('button')?.dataset.clef;
+    if (c && (c !== clef || mixed)) setClef(c);
+  });
+  $('timer').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const s = +b.dataset.s;
+    limit = (limit === s) ? 0 : s;          // tap the active one again to switch the timer off
+    store.set('timer', limit); timeouts = 0;
+    renderTimer();
+    if (!locked) startTimer();
+  });
+  // pause while the app is in the background, restart fresh when you come back
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { clearTimeout(timerId); timerId = null; }
+    else if (!locked) startTimer();
+  });
+
+  $('mix').addEventListener('click', () => {
+    mixed = !mixed; store.set('mixed', mixed); renderMix();
+    if (!mixed) store.set('clef', clef);
+    newNote();
+  });
+  $('reset').addEventListener('click', () => { right = 0; wrong = 0; renderCounts(); });
+
+  // Offline support when hosted on a real website (ignored where not allowed)
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+  } catch (e) {}
+
+  renderCounts();
+  showClef(clef);
+  renderMix();
+  renderTimer();
+  newNote();
+</script>
+</body>
+</html>
