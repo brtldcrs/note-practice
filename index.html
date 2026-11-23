@@ -98,6 +98,10 @@
   .keys button.ok{background:var(--green); border-color:var(--green); color:#fff}
   .keys button.bad{background:var(--red); border-color:var(--red); color:#fff}
   .hint{text-align:center; color:var(--muted); font-size:13px; margin:0}
+  .hint2{display:block; margin-top:6px}
+  .forget{display:block; margin:-10px auto 0; background:none; border:none; padding:6px 10px;
+    color:var(--muted); opacity:.7; font-size:12px; text-decoration:underline; cursor:pointer; font-family:inherit}
+  .forget.armed{color:var(--red); opacity:1}
 </style>
 </head>
 <body>
@@ -130,7 +134,7 @@
 
 
   <div class="clefs">
-    <div class="timer" id="timer" aria-label="Time per note (tap again to switch off)">
+    <div class="timer" id="timer" aria-label="Time per note: tap the selected one again to turn the timer off">
       <button data-s="1"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>1s</button>
       <button data-s="3"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>3s</button>
       <button data-s="5"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2h5"/></svg>5s</button>
@@ -140,11 +144,12 @@
       <button class="b" data-clef="bass">Bass</button>
       <button class="t" data-clef="treble">Treble</button>
     </div>
-    <button class="mix" id="mix" aria-pressed="false"><span class="tg"></span>Mix bass &amp; treble</button>
+    <button class="mix" id="mix" aria-pressed="false"><span class="tg"></span>Mix both clefs</button>
   </div>
 
   <div class="keys" id="keys"></div>
-  <p class="hint">Name the note. One tap per note: if right, the letter flashes green, if wrong, red. Then the next note appears.</p>
+  <p class="hint">Tap the letter that matches the note. Green means right, red means wrong, then the next note appears.<span class="hint2">Your progress is saved on this device only, so the notes you find hardest come back more often.</span></p>
+  <button class="forget" id="forget">Clear local data</button>
 </main>
 
 <script>
@@ -206,19 +211,52 @@
     newNote();
   }
 
+  // ---- learning: every note (clef + position) has a weight; harder notes get picked more often ----
+  // Stored on the device, so it keeps learning across sessions. Weight 1 = normal.
+  let weights = store.get('weights', {});
+  if (typeof weights !== 'object' || weights === null) weights = {};
+  const W_MIN = 0.3, W_MAX = 8;
+  const wOf = (c, nd) => (typeof weights[c+':'+nd] === 'number' ? weights[c+':'+nd] : 1);
+
+  function learn(result, ms){
+    // everything drifts slowly back toward normal, so old mistakes fade and easy notes still return
+    for (const k in weights){
+      weights[k] = 1 + (weights[k] - 1) * 0.98;
+      if (Math.abs(weights[k] - 1) < 0.02) delete weights[k];
+    }
+    const key = clef + ':' + d;
+    let w = wOf(clef, d);
+    const slowMs = limit ? limit * 500 : 2000;     // slow = over half the timer, or over 2 s without timer
+    if (result === 'wrong') w = Math.min(W_MAX, w + 1.5);
+    else if (ms > slowMs)   w = Math.max(W_MIN, w * 0.85);
+    else                    w = Math.max(W_MIN, w * 0.6);
+    weights[key] = w;
+    store.set('weights', weights);
+  }
+
+  function pickNote(prevClef, prevD){
+    const clefs = mixed ? ['bass','treble'] : [clef];
+    const pool = [];
+    let total = 0;
+    for (const c of clefs) for (let nd = -2; nd <= 10; nd++){
+      if (c === prevClef && nd === prevD) continue;  // never the same note twice in a row
+      const w = wOf(c, nd); total += w; pool.push([c, nd, total]);
+    }
+    const r = Math.random() * total;
+    return pool.find(p => r < p[2]) || pool[pool.length - 1];
+  }
+
+  let shownAt = 0;
+
   function newNote(){
-    const prevClef = clef, prevD = d;
-    let c = clef, nd;
-    do {
-      if (mixed) c = Math.random() < 0.5 ? 'bass' : 'treble';
-      nd = Math.floor(Math.random() * 13) - 2;
-    } while (c === prevClef && nd === prevD);
+    const [c, nd] = pickNote(clef, d);
     if (c !== clef) showClef(c);
     d = nd;
     answer = LETTERS[(BASE[clef] + d) % 7];
     locked = false;
     keysEl.querySelectorAll('button').forEach(b => { b.className = ''; });
     drawNote();
+    shownAt = performance.now();
     startTimer();
   }
 
@@ -250,6 +288,7 @@
     if (locked) return;
     locked = true; timerId = null;
     timeouts++; wrong++;
+    learn('wrong');
     $('timebar').classList.add('out');
     noteG.className.baseVal = 'bad';
     keysEl.querySelector(`[data-l="${answer}"]`).className = 'ok';
@@ -271,10 +310,13 @@
     if (locked) return;
     locked = true; timeouts = 0;
     stopTimer();
+    const ms = performance.now() - shownAt;
     if (btn.dataset.l === answer){
       btn.className = 'ok'; noteG.className.baseVal = 'ok'; right++;
+      learn('right', ms);
     } else {
       btn.className = 'bad'; noteG.className.baseVal = 'bad'; wrong++;
+      learn('wrong');
       // flash the correct letter green so you see what it was
       keysEl.querySelector(`[data-l="${answer}"]`).className = 'ok';
     }
@@ -298,6 +340,21 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { clearTimeout(timerId); timerId = null; }
     else if (!locked) startTimer();
+  });
+
+  // two taps to clear what the app has learned about your weak notes
+  let forgetArmed = null;
+  $('forget').addEventListener('click', () => {
+    const f = $('forget');
+    if (!forgetArmed){
+      f.textContent = 'Tap again to confirm'; f.classList.add('armed');
+      forgetArmed = setTimeout(() => { forgetArmed = null; f.textContent = 'Clear local data'; f.classList.remove('armed'); }, 3000);
+    } else {
+      clearTimeout(forgetArmed); forgetArmed = null;
+      weights = {}; store.set('weights', weights);
+      f.textContent = 'Cleared'; f.classList.remove('armed');
+      setTimeout(() => { f.textContent = 'Clear local data'; }, 1500);
+    }
   });
 
   $('mix').addEventListener('click', () => {

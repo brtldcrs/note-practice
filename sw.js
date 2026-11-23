@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the app on the phone.
 // When you change any file, bump VERSION so phones fetch the new copy.
-const VERSION = 'note-practice-v10';
+const VERSION = 'note-practice-v15';
 const FILES = [
   './',
   'index.html',
